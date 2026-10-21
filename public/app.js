@@ -1,4 +1,4 @@
-import { h, fmtTime, fmtDate, announce, confirmDialog } from './util.js';
+import { h, put, fmtTime, fmtDate, announce, confirmDialog } from './util.js';
 import { api } from './api.js';
 import { MeetingRecorder, recordingSupport } from './recorder.js';
 
@@ -24,11 +24,11 @@ function navigate() {
   lastHash = location.hash || '#/';
   guard = () => false;
   clearInterval(timer); cleanup(); cleanup = () => {};
-  main.classList.remove('wide');
+  main.classList.remove('wide', 'recording');
   const hash = location.hash || '#/';
   const m = hash.match(/^#\/m\/([\w-]+)$/);
   (m ? meetingView(m[1]) : homeView()).catch((e) => {
-    main.replaceChildren(h('div', { class: 'notice error', role: 'alert' }, e.message), h('a', { href: '#/' }, '← Voltar à lista'));
+    put(main, h('div', { class: 'notice error', role: 'alert' }, e.message), h('a', { href: '#/' }, '← Voltar à lista'));
   });
   main.focus();
 }
@@ -39,18 +39,33 @@ async function homeView() {
   const consent = h('input', { type: 'checkbox', id: 'consent' });
   const title = h('input', { type: 'text', id: 'title', placeholder: 'Ex.: Planejamento do trimestre', maxLength: 200 });
   const recBox = h('div', { class: 'card primary' });
-  const upBox = h('div', { class: 'card' });
-  const listBox = h('div', { class: 'card' });
+  const upBox = h('div', { class: 'card upload' });
+  const listBox = h('div', { class: 'card list-card' });
   const support = recordingSupport();
+
+  /* --- primeira visita --- */
+  const seen = (() => { try { return localStorage.getItem('confere_onboarded') === '1'; } catch { return false; } })();
+  const tour = seen ? null : h('section', { class: 'card tour setup', 'aria-labelledby': 'tour-title' },
+    h('h2', { id: 'tour-title' }, 'Como o Confere funciona'),
+    h('ol', { class: 'tour-steps' },
+      h('li', {}, h('strong', {}, 'Grave ou envie. '), 'Participe da reunião sem anotar; use "Marcar momento" quando algo importante for dito.'),
+      h('li', {}, h('strong', {}, 'Aguarde o processamento. '), 'Você pode sair da página; ele continua no servidor.'),
+      h('li', {}, h('strong', {}, 'Confira. '), 'Cada decisão e tarefa tem um ▶ que toca o trecho da gravação. O que é sugestão da IA vem identificado.')),
+    h('button', { class: 'btn small', type: 'button', onclick: () => { try { localStorage.setItem('confere_onboarded', '1'); } catch { /* ignora */ } tour.remove(); } }, 'Entendi'));
 
   /* --- gravação --- */
   const rec = new MeetingRecorder();
-  const status = h('div', { role: 'status' });
+  const marks = []; // momentos marcados (s) na linha do tempo do áudio
+  const marksEl = h('p', { class: 'muted', 'aria-live': 'polite' });
+  const renderMarks = () => { marksEl.textContent = marks.length ? `Momentos marcados: ${marks.map(fmtTime).join(', ')}` : 'Toque em "Marcar momento" quando algo importante for dito.'; };
+  const markBtn = h('button', { class: 'btn big', type: 'button' }, '★ Marcar momento');
+  markBtn.onclick = () => { if (rec.state !== 'recording') return; marks.push(Math.round(rec.elapsedSec * 10) / 10); renderMarks(); announce(`Momento marcado em ${fmtTime(rec.elapsedSec)}`); };
+  const status = h('div', { role: 'status', class: 'rec-status' });
   const startBtn = h('button', { class: 'btn primary big', type: 'button' }, 'Iniciar gravação');
   const pauseBtn = h('button', { class: 'btn', type: 'button' }, 'Pausar');
   const stopBtn = h('button', { class: 'btn primary', type: 'button' }, 'Encerrar e processar');
   const discardBtn = h('button', { class: 'btn danger', type: 'button' }, 'Descartar');
-  const controls = h('div', { class: 'row' });
+  const controls = h('div', { class: 'row rec-controls' });
   const pending = { blob: null, duration: 0 }; // áudio capturado que ainda não foi enviado
 
   const needConsent = () => {
@@ -63,7 +78,7 @@ async function homeView() {
   async function send(blob, meta, source) {
     const bar = h('progress', { max: 1, value: 0, 'aria-label': 'Progresso do envio' });
     const label = h('p', { role: 'status' }, 'Enviando…');
-    status.replaceChildren(label, bar);
+    put(status, label, bar);
     try {
       const m = await api.upload(blob, { ...meta, source }, (p) => { bar.value = p; label.textContent = `Enviando… ${Math.round(p * 100)}%`; });
       pending.blob = null;
@@ -71,30 +86,34 @@ async function homeView() {
     } catch (e) {
       const retry = h('button', { class: 'btn primary', type: 'button', onclick: () => send(blob, meta, source) }, 'Tentar enviar novamente');
       const save = h('a', { class: 'btn', download: `reuniao-${Date.now()}.${(blob.type.split('/')[1] || 'webm').split(';')[0]}`, href: URL.createObjectURL(blob) }, 'Salvar áudio no dispositivo');
-      status.replaceChildren(h('div', { class: 'notice error', role: 'alert' }, `Erro no envio: ${e.message}`), h('div', { class: 'row' }, retry, save));
+      put(status, h('div', { class: 'notice error', role: 'alert' }, `Erro no envio: ${e.message}`), h('div', { class: 'row' }, retry, save));
     }
   }
 
   function renderRec() {
     const s = rec.state;
+    main.classList.toggle('recording', s === 'recording' || s === 'paused');
     controls.replaceChildren();
     if (s === 'recording' || s === 'paused') {
       const clock = h('span', { 'aria-hidden': 'true' }, fmtTime(rec.elapsedSec));
-      status.replaceChildren(
+      put(status, 
         h('div', { class: `rec-indicator ${s === 'paused' ? 'paused' : ''}` }, h('span', { class: 'dot' }),
           s === 'paused' ? 'Gravação PAUSADA' : 'GRAVANDO', clock),
         rec.backgrounded ? h('div', { class: 'notice' }, 'A aba ficou em segundo plano. Alguns navegadores e celulares suspendem a captura nessa situação; confira se o tempo continua avançando e escute o áudio depois.') : null,
+        marksEl,
         h('p', { class: 'muted' }, 'Mantenha esta aba aberta e o dispositivo ativo durante a reunião.'),
       );
+      renderMarks();
       pauseBtn.textContent = s === 'paused' ? 'Retomar' : 'Pausar';
-      controls.append(pauseBtn, stopBtn, discardBtn);
+      markBtn.disabled = s !== 'recording';
+      controls.append(markBtn, pauseBtn, stopBtn, discardBtn);
       announce(s === 'paused' ? 'Gravação pausada' : 'Gravando');
     } else if (s === 'error') {
       const partial = rec.salvage();
-      status.replaceChildren(h('div', { class: 'notice error', role: 'alert' }, rec.error));
+      put(status, h('div', { class: 'notice error', role: 'alert' }, rec.error));
       if (partial) {
         const blob = partial;
-        controls.append(h('button', { class: 'btn primary', type: 'button', onclick: () => send(blob, { title: title.value.trim(), filename: 'gravacao-parcial', duration: rec.elapsedSec }, 'gravacao') }, 'Enviar o trecho já capturado'));
+        controls.append(h('button', { class: 'btn primary', type: 'button', onclick: () => send(blob, { title: title.value.trim(), filename: 'gravacao-parcial', duration: rec.elapsedSec, marks: [...marks] }, 'gravacao') }, 'Enviar o trecho já capturado'));
       }
       controls.append(h('button', { class: 'btn', type: 'button', onclick: () => rec.discard() }, 'Fechar'));
     } else {
@@ -106,15 +125,16 @@ async function homeView() {
 
   startBtn.onclick = async () => {
     if (!needConsent()) return;
+    marks.length = 0;
     await rec.start();
   };
   pauseBtn.onclick = () => (rec.state === 'paused' ? rec.resume() : rec.pause());
   stopBtn.onclick = async () => {
     const duration = rec.elapsedSec;
     const blob = await rec.stop();
-    if (!blob) return status.replaceChildren(h('div', { class: 'notice error', role: 'alert' }, 'Nenhum áudio foi capturado.'));
+    if (!blob) return put(status, h('div', { class: 'notice error', role: 'alert' }, 'Nenhum áudio foi capturado.'));
     pending.blob = blob;
-    await send(blob, { title: title.value.trim(), filename: 'gravacao', duration }, 'gravacao');
+    await send(blob, { title: title.value.trim(), filename: 'gravacao', duration, marks: [...marks] }, 'gravacao');
     rec.state = 'idle'; renderRec();
   };
   discardBtn.onclick = async () => {
@@ -127,8 +147,9 @@ async function homeView() {
   guard = () => rec.state === 'recording' || rec.state === 'paused';
   cleanup = () => { clearInterval(tick); window.removeEventListener('beforeunload', warnUnload); if (rec.state === 'recording' || rec.state === 'paused') rec.discard(); };
 
-  recBox.append(
+  put(recBox, 
     h('h2', {}, 'Gravar agora'),
+    support.ok ? h('p', { class: 'muted' }, 'Um clique para começar. O navegador vai pedir acesso ao microfone.') : null,
     support.ok ? null : h('div', { class: 'notice' }, `${support.reason} Use o envio de arquivo ao lado.`),
     controls, status,
   );
@@ -140,27 +161,27 @@ async function homeView() {
   upBtn.onclick = async () => {
     if (!needConsent()) return;
     const f = file.files[0];
-    if (!f) return upStatus.replaceChildren(h('div', { class: 'notice error', role: 'alert' }, 'Escolha um arquivo de áudio primeiro.'));
-    if (f.size > config.maxUploadMb * 1048576) return upStatus.replaceChildren(h('div', { class: 'notice error', role: 'alert' }, `O arquivo tem ${(f.size / 1048576).toFixed(1)} MB e o limite é ${config.maxUploadMb} MB. Divida ou comprima o áudio.`));
+    if (!f) return put(upStatus, h('div', { class: 'notice error', role: 'alert' }, 'Escolha um arquivo de áudio primeiro.'));
+    if (f.size > config.maxUploadMb * 1048576) return put(upStatus, h('div', { class: 'notice error', role: 'alert' }, `O arquivo tem ${(f.size / 1048576).toFixed(1)} MB e o limite é ${config.maxUploadMb} MB. Divida ou comprima o áudio.`));
     const bar = h('progress', { max: 1, value: 0, 'aria-label': 'Progresso do envio' });
-    upStatus.replaceChildren(h('p', {}, 'Enviando…'), bar);
+    put(upStatus, h('p', {}, 'Enviando…'), bar);
     upBtn.disabled = true;
     try {
       const m = await api.upload(f, { title: title.value.trim() || f.name.replace(/\.[^.]+$/, ''), filename: f.name, source: 'arquivo' }, (p) => { bar.value = p; });
       location.hash = `#/m/${m.id}`;
     } catch (e) {
       upBtn.disabled = false;
-      upStatus.replaceChildren(h('div', { class: 'notice error', role: 'alert' }, e.message));
+      put(upStatus, h('div', { class: 'notice error', role: 'alert' }, e.message));
     }
   };
-  upBox.append(h('h2', {}, 'Enviar arquivo de áudio'), h('label', { for: 'file' }, 'Arquivo (mp3, m4a, wav, webm, ogg…)'), file,
+  put(upBox, h('h2', {}, 'Enviar arquivo de áudio'), h('label', { for: 'file' }, 'Arquivo (mp3, m4a, wav, webm, ogg…)'), file,
     h('p', { class: 'muted' }, `Tamanho máximo: ${config.maxUploadMb} MB.`), upBtn, upStatus);
 
   /* --- lista --- */
   async function refreshList() {
     const items = await api.list();
     const busy = items.some((m) => m.status === 'transcribing' || m.status === 'summarizing');
-    listBox.replaceChildren(h('h2', {}, 'Suas reuniões'),
+    put(listBox, h('h2', {}, 'Suas reuniões'),
       items.length ? h('ul', { class: 'list' }, items.map((m) => h('li', {}, h('a', { class: 'item', href: `#/m/${m.id}` },
         h('span', {}, h('span', { class: 'title' }, m.title), h('br'),
           h('span', { class: 'meta' }, fmtDate(m.createdAt), m.durationSec ? ` · ${fmtTime(m.durationSec)}` : '', m.source === 'arquivo' ? ' · arquivo enviado' : ' · gravada no navegador')),
@@ -171,10 +192,11 @@ async function homeView() {
   await refreshList();
   timer = setInterval(() => refreshList().catch(() => {}), 3000);
 
-  main.replaceChildren(
+  put(main, 
     h('div', { class: 'hero' }, h('h1', {}, 'Participe da reunião. ', h('span', { class: 'hl' }, 'Depois, confira.')), h('p', { class: 'lead' }, 'Grave ou envie o áudio e receba um resumo com decisões e tarefas ligadas aos trechos da conversa, para você conferir cada ponto.')),
-    config.demo ? h('div', { class: 'notice' }, h('strong', {}, 'Modo demonstração. '), 'Nenhum serviço de IA está configurado: o áudio não será transcrito de verdade e o resultado será um exemplo fixo. Defina OPENAI_API_KEY no servidor para o processamento real.') : null,
-    h('div', { class: 'card' },
+    config.demo ? h('div', { class: 'notice setup' }, h('strong', {}, 'Modo demonstração. '), 'Nenhum serviço de IA está configurado: o áudio não será transcrito de verdade e o resultado será um exemplo fixo. Defina OPENAI_API_KEY no servidor para o processamento real.') : null,
+    tour,
+    h('div', { class: 'card setup' },
       h('label', { for: 'title' }, 'Título da reunião (opcional)'), title,
       h('label', { class: 'check' }, consent, h('span', {}, 'Tenho autorização dos participantes (e/ou da minha organização) para gravar ou enviar esta reunião. O áudio é guardado apenas no servidor deste app e pode ser excluído a qualquer momento.'))),
     h('div', { class: 'grid' }, recBox, upBox),
@@ -190,10 +212,11 @@ async function meetingView(id) {
   main.classList.add('wide');
   let m = await api.get(id);
   let editing = false;
+  let onlyCheck = false; // filtro: só o que precisa de conferência
   let draft = null;
   const root = h('div');
   const audio = h('audio', { controls: true, preload: 'metadata', src: api.audioUrl(id), 'aria-label': 'Áudio da reunião' });
-  main.replaceChildren(root);
+  put(main, root);
 
   const seek = (sec, segIndex) => {
     audio.currentTime = sec; audio.play().catch(() => {});
@@ -211,6 +234,7 @@ async function meetingView(id) {
       h('details', { class: 'quotes' }, h('summary', {}, 'Ver trecho da conversa'),
         item.evidence.map((i) => h('blockquote', {}, h('span', { class: 'meta' }, `[${fmtTime(segs()[i].start)}] `), segs()[i].text))));
   };
+  const needsCheck = (x) => x.unverified || x.origin === 'sugestao_ia';
   const tags = (item) => h('span', { class: 'tags' },
     item.origin === 'sugestao_ia' ? h('span', { class: 'tag ai' }, 'Sugestão da IA — não foi dito') : null,
     item.origin === 'manual' ? h('span', { class: 'tag' }, 'Adicionado por você') : null,
@@ -245,10 +269,10 @@ async function meetingView(id) {
       sec.append(addBtn('Adicionar tópico', () => r.topics.push({ id: '', title: '', points: [{ id: '', text: '' }] })));
       return sec;
     }
-    if (r.overview) sec.append(h('p', {}, r.overview));
+    if (r.overview) sec.append(h('p', { class: 'overview' }, r.overview));
     if (!r.topics.length) sec.append(h('p', { class: 'muted' }, 'Nenhum tópico identificado.'));
-    r.topics.forEach((t) => sec.append(h('div', {}, h('h3', {}, t.title || 'Sem título'),
-      t.points.map((p) => h('div', { class: 'item' }, h('span', {}, p.text), tags(p), evidenceView(p))))));
+    r.topics.forEach((t) => sec.append(h('div', { class: 'topic', 'data-check': t.points.some(needsCheck) ? '1' : false }, h('h3', {}, t.title || 'Sem título'),
+      t.points.map((p) => h('div', { class: 'item', 'data-check': needsCheck(p) ? '1' : false }, h('span', {}, p.text), tags(p), evidenceView(p))))));
     return sec;
   }
 
@@ -258,7 +282,7 @@ async function meetingView(id) {
     if (!r.decisions.length && !editing) sec.append(h('p', { class: 'muted' }, 'Nenhuma decisão foi identificada na conversa.'));
     r.decisions.forEach((d, i) => sec.append(editing
       ? h('div', { class: 'item row' }, h('div', { class: 'grow' }, input(d, 'text', 'Decisão')), removeBtn(r.decisions, i, 'decisão'))
-      : h('div', { class: 'item' }, h('span', {}, d.text), tags(d), evidenceView(d))));
+      : h('div', { class: 'item', 'data-check': needsCheck(d) ? '1' : false }, h('span', {}, d.text), tags(d), evidenceView(d))));
     if (editing) sec.append(addBtn('Adicionar decisão', () => r.decisions.push({ id: '', text: '' })));
     return sec;
   }
@@ -279,17 +303,52 @@ async function meetingView(id) {
         try { m = await api.patch(id, { result: { ...m.result, tasks: m.result.tasks.map((x) => x.id === t.id ? { ...x, done: box.checked } : x) } }); render(); }
         catch (e) { box.checked = !box.checked; announce(e.message); }
       };
-      sec.append(h('div', { class: 'item' }, h('label', { class: 'check' }, box, h('span', {}, t.text)), tags(t),
+      sec.append(h('div', { class: 'item', 'data-check': needsCheck(t) ? '1' : false }, h('label', { class: 'check' }, box, h('span', {}, t.text)), tags(t),
         h('div', { class: 'meta' }, `Responsável: ${t.owner || 'não especificado'} · Prazo: ${t.deadline || 'não especificado'}`), evidenceView(t)));
     });
     if (editing) sec.append(addBtn('Adicionar tarefa', () => r.tasks.push({ id: '', text: '', owner: '', deadline: '', done: false })));
     return sec;
   }
 
+  // Comparação sem acento/caixa que mantém o mesmo comprimento (para poder destacar o trecho achado).
+  const fold = (t) => [...t].map((c) => { const f = c.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); return f.length === 1 ? f : c.toLowerCase(); }).join('');
+
   function transcriptSection() {
+    const box = h('div');
+    const q = h('input', { type: 'text', id: 'tx-search', placeholder: 'Buscar na transcrição', 'aria-label': 'Buscar na transcrição', autocomplete: 'off' });
+    const count = h('p', { class: 'meta', role: 'status' });
+    const row = (s, term) => {
+      const at = term ? fold(s.text).indexOf(term) : -1;
+      const text = at < 0 ? [s.text] : [s.text.slice(0, at), h('mark', {}, s.text.slice(at, at + term.length)), s.text.slice(at + term.length)];
+      return h('div', { class: 'seg', id: `seg-${s.i}` }, h('button', { class: 'chip', type: 'button', onclick: () => seek(s.start, s.i) }, `▶ ${fmtTime(s.start)}`), h('span', {}, text));
+    };
+    const draw = () => {
+      const term = fold(q.value.trim());
+      const rows = segs().filter((s) => !term || fold(s.text).includes(term));
+      box.replaceChildren(...rows.map((s) => row(s, term)));
+      count.textContent = term ? (rows.length ? `${rows.length} trecho(s) com "${q.value.trim()}"` : 'Nenhum trecho encontrado.') : '';
+    };
+    q.addEventListener('input', draw);
+    draw();
     return h('section', { class: 'card' }, h('h2', {}, 'Transcrição'),
       m.demo ? h('div', { class: 'notice' }, 'Texto de exemplo (demonstração). Não é a transcrição do seu áudio.') : null,
-      segs().map((s) => h('div', { class: 'seg', id: `seg-${s.i}` }, h('button', { class: 'chip', type: 'button', onclick: () => seek(s.start, s.i) }, `▶ ${fmtTime(s.start)}`), h('span', {}, s.text))));
+      h('div', { class: 'no-print' }, q, count), box);
+  }
+
+  function marksSection() {
+    if (!m.marks?.length || !segs().length) return null;
+    const near = (t) => { let k = 0; segs().forEach((s, i) => { if (s.start <= t) k = i; }); return k; };
+    return h('section', { class: 'card' }, h('h2', {}, '★ Momentos que você marcou'),
+      h('p', { class: 'meta' }, 'Marcados por você durante a gravação. Não passam pela IA; servem de atalho para o áudio.'),
+      m.marks.map((t) => { const i = near(t); return h('div', { class: 'mark-row' }, h('button', { class: 'chip', type: 'button', onclick: () => seek(t, i) }, `▶ ${fmtTime(t)}`), h('span', { class: 'meta' }, `trecho próximo: "${segs()[i].text}"`)); }));
+  }
+
+  function filterBar() {
+    const r = m.result;
+    const n = r.decisions.filter(needsCheck).length + r.tasks.filter(needsCheck).length + r.topics.reduce((a, t) => a + t.points.filter(needsCheck).length, 0);
+    const box = h('input', { type: 'checkbox', id: 'only-check', checked: onlyCheck, disabled: n === 0 && !onlyCheck });
+    box.onchange = () => { onlyCheck = box.checked; document.querySelector('.result-layout')?.classList.toggle('only-check', onlyCheck); };
+    return h('label', { class: 'check no-print', for: 'only-check' }, box, h('span', {}, n ? `Mostrar só o que precisa de conferência (${n}): sugestões da IA e itens sem trecho de apoio` : 'Nada precisa de conferência extra: todo item dito tem trecho de apoio.'));
   }
 
   /* --- processamento / erro --- */
@@ -315,7 +374,7 @@ async function meetingView(id) {
       } } }, 'Excluir reunião');
 
     const ready = m.status === 'ready';
-    root.replaceChildren(
+    put(root, 
       h('p', { class: 'no-print' }, h('a', { href: '#/' }, '← Todas as reuniões')),
       h('div', { class: 'row between' }, h('h1', {}, m.title), statusBadge(m)),
       h('p', { class: 'meta' }, `${fmtDate(m.createdAt)}${m.durationSec ? ` · ${fmtTime(m.durationSec)}` : ''}`),
@@ -328,8 +387,8 @@ async function meetingView(id) {
             : [h('button', { class: 'btn', type: 'button', onclick: startEdit }, 'Editar resumo e tarefas'),
               h('a', { class: 'btn', href: api.exportUrl(id), download: '' }, 'Exportar Markdown'),
               h('button', { class: 'btn', type: 'button', onclick: () => { document.querySelectorAll('details').forEach((d) => { d.open = true; }); window.print(); } }, 'Imprimir')]),
-        h('div', { id: 'save-err' }),
-          h('div', { class: 'result-layout' }, h('div', { class: 'main-col' }, tasksSection(), decisionsSection(), summarySection()),
+        h('div', { id: 'save-err' }), editing ? null : filterBar(),
+          h('div', { class: `result-layout${onlyCheck ? ' only-check' : ''}` }, h('div', { class: 'main-col' }, marksSection(), tasksSection(), decisionsSection(), summarySection()),
             h('aside', { class: 'side-col', 'aria-label': 'Áudio e transcrição' }, h('div', { class: 'card no-print' }, audio), transcriptSection())))
         : progressSection(),
       h('div', { class: 'no-print' }, del));

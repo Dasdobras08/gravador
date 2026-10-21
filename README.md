@@ -36,6 +36,8 @@ Sem `OPENAI_API_KEY` o app roda em **modo demonstração**: o áudio é guardado
 
 ## O que funciona hoje (verificado)
 
+Novidades: tela de gravação com relógio grande, botão "Marcar momento", busca na transcrição, filtro "só o que precisa de conferência" e apresentação na primeira visita.
+
 Roteiro de testes manuais (API real, iOS/Android, acessibilidade): `docs/ROTEIRO-TESTE.md`. Teste automatizado com a API real: `OPENAI_API_KEY=sk-... npm test` (ignorado sem chave).
 
 Lista/estados, gravação no Chromium (microfone falso), pausa/retomada, envio de arquivo com progresso, processamento, erro e reprocessamento, edição, exportação Markdown, impressão, exclusão completa, Range de áudio, validações. O caminho de IA real foi testado **apenas contra um servidor OpenAI simulado**; não foi exercitado com a API real nem com áudio de reunião real.

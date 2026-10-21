@@ -41,3 +41,8 @@ export function confirmDialog(title, text, okLabel) {
     dlg.showModal();
   });
 }
+
+/** Substitui o conteúdo de `el`, ignorando null/false (replaceChildren/append escreveriam "null"). */
+export function put(el, ...children) {
+  el.replaceChildren(...children.flat().filter((c) => c != null && c !== false));
+}

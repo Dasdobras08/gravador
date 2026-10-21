@@ -97,3 +97,18 @@ dialog::backdrop { background: rgb(0 0 0 / .5); }
   .result-layout { display: block; } details.quotes { display: block; } details.quotes > * { display: block; }
 }
 .chip { white-space: nowrap; } .seg .chip { align-self: flex-start; margin-top: 0; }
+/* Modo gravação: só o cartão de gravar, com relógio grande */
+main.recording .hero, main.recording .setup, main.recording .upload, main.recording .list-card { display: none; }
+main.recording .grid { grid-template-columns: 1fr; }
+main.recording .card.primary { padding: 28px 20px; text-align: center; }
+main.recording .rec-indicator { justify-content: center; flex-wrap: wrap; }
+main.recording .rec-indicator span[aria-hidden] { flex-basis: 100%; font-size: clamp(3rem, 14vw, 5.5rem); line-height: 1.1; }
+main.recording .row { justify-content: center; }
+.tour-steps { margin: 0 0 12px; padding-left: 1.3em; } .tour-steps li { margin: 6px 0; }
+.tour { background: var(--mark); color: var(--mark-text); border-color: transparent; }
+.tour .btn { background: var(--card); color: var(--text); }
+mark { background: var(--mark); color: var(--mark-text); border-radius: 4px; padding: 0 2px; }
+.only-check .item:not([data-check]), .only-check .topic:not([data-check]), .only-check .overview { display: none; }
+main.recording .card.primary { display: flex; flex-direction: column; align-items: center; }
+main.recording .rec-status { order: 1; width: 100%; } main.recording .rec-controls { order: 2; margin-top: 8px; }
+.mark-row { padding: 6px 0; border-top: 1px solid var(--line); }

@@ -168,3 +168,15 @@ test('reuniões interrompidas são retomadas após reinício', async () => {
     await wait(async () => (await s.app.store.get(m.id)).status === 'ready');
   } finally { await s.close(); }
 });
+
+test('momentos marcados durante a gravação são guardados e exportados', async () => {
+  const s = await boot(demoProvider);
+  try {
+    const { id } = await (await upload(s.base, 'title=M&source=gravacao&marks=5.5,2,x')).json();
+    const m = await wait(async () => { const x = await (await fetch(`${s.base}/api/meetings/${id}`)).json(); return x.status === 'ready' && x; });
+    assert.deepEqual(m.marks, [2, 5.5]);
+    const md = await (await fetch(`${s.base}/api/meetings/${id}/export.md`)).text();
+    assert.match(md, /Momentos marcados/);
+    assert.match(md, /\[00:02\]/);
+  } finally { await s.close(); }
+});

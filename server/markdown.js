@@ -29,6 +29,7 @@ export function toMarkdown(m) {
     return out.join('\n');
   }
   out.push('> Resumo gerado por IA. Confira os trechos indicados antes de confiar em qualquer ponto.', '');
+  if (m.marks?.length) out.push('## Momentos marcados por você durante a gravação', ...m.marks.map((t) => `- [${ts(t)}]`), '');
   if (r.warnings.length) out.push('## Avisos', ...r.warnings.map((w) => `- ⚠️ ${w}`), '');
   if (r.overview) out.push('## Visão geral', r.overview, '');
   out.push('## Tópicos');

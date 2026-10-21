@@ -139,3 +139,13 @@ export function sanitizeSegments(raw) {
   }
   return out;
 }
+
+/** Momentos marcados pelo usuário durante a gravação (segundos), vindos como "12.5,40". */
+export function sanitizeMarks(raw) {
+  const out = [];
+  for (const part of String(raw ?? '').split(',')) {
+    const n = Number(part);
+    if (part.trim() !== '' && Number.isFinite(n) && n >= 0 && n <= 24 * 3600) out.push(Math.round(n * 10) / 10);
+  }
+  return [...new Set(out)].sort((a, b) => a - b).slice(0, 200);
+}

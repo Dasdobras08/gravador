@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Store } from './store.js';
 import { Pipeline } from './pipeline.js';
-import { sanitizeEdit } from './schema.js';
+import { sanitizeEdit, sanitizeMarks } from './schema.js';
 import { toMarkdown } from './markdown.js';
 
 const PUBLIC_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
@@ -122,7 +122,7 @@ export async function createApp({ config, provider, log = console }) {
       const dur = Number(url.searchParams.get('duration'));
       const title = (url.searchParams.get('title') || '').trim().slice(0, 200)
         || (source === 'gravacao' ? `Reunião de ${new Date().toLocaleString('pt-BR')}` : filename.replace(/\.[^.]+$/, ''));
-      const m = await store.create({ title, filename, mime, source, durationSec: Number.isFinite(dur) && dur > 0 ? dur : null });
+      const m = await store.create({ title, filename, mime, source, durationSec: Number.isFinite(dur) && dur > 0 ? dur : null, marks: sanitizeMarks(url.searchParams.get('marks')) });
       await fsp.writeFile(store.audioPath(m.id), body, { mode: 0o600 });
       pipeline.enqueue(m.id);
       return json(res, 202, summary(m));

@@ -20,10 +20,11 @@ export const api = {
   exportUrl: (id) => `/api/meetings/${id}/export.md`,
 
   /** Envia o áudio com progresso (fetch ainda não expõe progresso de upload). */
-  upload(blob, { title, filename, source, duration }, onProgress) {
+  upload(blob, { title, filename, source, duration, marks }, onProgress) {
     return new Promise((resolve, reject) => {
       const q = new URLSearchParams({ title, filename, source });
       if (duration) q.set('duration', String(Math.round(duration)));
+      if (marks?.length) q.set('marks', marks.join(','));
       const xhr = new XMLHttpRequest();
       xhr.open('POST', `/api/meetings?${q}`);
       xhr.setRequestHeader('Content-Type', (blob.type || 'application/octet-stream').split(';')[0]);

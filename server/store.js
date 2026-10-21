@@ -24,13 +24,14 @@ export class Store {
     return path.join(this.dir(id), 'audio.bin');
   }
 
-  async create({ title, filename, mime, source, durationSec }) {
+  async create({ title, filename, mime, source, durationSec, marks = [] }) {
     const id = crypto.randomUUID();
     await fs.mkdir(this.dir(id), { recursive: true, mode: 0o700 });
     const now = new Date().toISOString();
     const meeting = {
       id, title, filename, mime, source, // source: 'gravacao' | 'arquivo'
       durationSec: durationSec ?? null,
+      marks, // momentos marcados pelo usuário durante a gravação (segundos)
       status: 'transcribing', // transcribing | summarizing | ready | error
       error: null, failedStage: null,
       demo: false,

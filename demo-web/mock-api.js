@@ -34,11 +34,11 @@ const api = {
   },
   audioUrl: (id) => store.get(id)?.audioUrl || '',
   exportMarkdown: (id) => toMarkdown(store.get(id)),
-  upload: async (blob, { title, filename, source, duration }, onProgress) => {
+  upload: async (blob, { title, filename, source, duration, marks }, onProgress) => {
     if (!/^(audio|video)\//.test(blob.type || 'audio/x')) throw new Error('Formato não suportado. Envie um arquivo de áudio.');
     for (let p = 0; p <= 1; p += 0.25) { onProgress(p); await sleep(120); }
     const id = crypto.randomUUID();
-    const m = { id, title: title || 'Reunião de demonstração', filename, mime: blob.type, source, durationSec: duration ?? null,
+    const m = { id, title: title || 'Reunião de demonstração', filename, mime: blob.type, source, durationSec: duration ?? null, marks: marks || [],
       status: 'transcribing', error: null, failedStage: null, demo: true, createdAt: new Date().toISOString(), transcript: null, result: null,
       audioUrl: URL.createObjectURL(blob) };
     store.set(id, m);

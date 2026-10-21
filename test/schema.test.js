@@ -68,3 +68,9 @@ test('edição manual preserva evidências e marca itens editados/novos', () => 
   assert.equal(edited.tasks[0].owner, null);
   assert.equal(edited.tasks[0].edited, true);
 });
+
+test('momentos marcados: aceita números válidos, ordena, remove duplicados e lixo', async () => {
+  const { sanitizeMarks } = await import('../server/schema.js');
+  assert.deepEqual(sanitizeMarks('40.04,12.5,12.5,abc,-3,,1e9'), [12.5, 40]);
+  assert.deepEqual(sanitizeMarks(null), []);
+});
