@@ -45,8 +45,8 @@ async function homeView() {
 
   /* --- primeira visita --- */
   const seen = (() => { try { return localStorage.getItem('confere_onboarded') === '1'; } catch { return false; } })();
-  const tour = seen ? null : h('section', { class: 'card tour setup', 'aria-labelledby': 'tour-title' },
-    h('h2', { id: 'tour-title' }, 'Como o Confere funciona'),
+  const tour = seen ? null : h('details', { class: 'card tour setup', open: window.innerWidth > 700 },
+    h('summary', {}, 'Como o Confere funciona'),
     h('ol', { class: 'tour-steps' },
       h('li', {}, h('strong', {}, 'Grave ou envie. '), 'Participe da reunião sem anotar; use "Marcar momento" quando algo importante for dito.'),
       h('li', {}, h('strong', {}, 'Aguarde o processamento. '), 'Você pode sair da página; ele continua no servidor.'),
@@ -150,7 +150,7 @@ async function homeView() {
   put(recBox, 
     h('h2', {}, 'Gravar agora'),
     support.ok ? h('p', { class: 'muted' }, 'Um clique para começar. O navegador vai pedir acesso ao microfone.') : null,
-    support.ok ? null : h('div', { class: 'notice' }, `${support.reason} Use o envio de arquivo ao lado.`),
+    support.ok ? null : h('div', { class: 'notice' }, `${support.reason} Use o envio de arquivo.`),
     controls, status,
   );
 
@@ -374,13 +374,15 @@ async function meetingView(id) {
       } } }, 'Excluir reunião');
 
     const ready = m.status === 'ready';
+    const wide = window.matchMedia('(min-width: 980px)').matches; // no celular o áudio fica fixo no topo
     put(root, 
       h('p', { class: 'no-print' }, h('a', { href: '#/' }, '← Todas as reuniões')),
       h('div', { class: 'row between' }, h('h1', {}, m.title), statusBadge(m)),
       h('p', { class: 'meta' }, `${fmtDate(m.createdAt)}${m.durationSec ? ` · ${fmtTime(m.durationSec)}` : ''}`),
       m.demo ? h('div', { class: 'notice' }, h('strong', {}, 'DEMONSTRAÇÃO: '), 'o conteúdo abaixo é um exemplo fixo e não foi gerado a partir do seu áudio.') : null,
-      h('div', { class: 'no-print' }, h('label', { for: 'meeting-title' }, 'Título'), titleInput, ready ? null : h('div', { class: 'card' }, audio)),
-      ready ? h('div', {}, m.result.warnings.map((w) => h('div', { class: 'notice' }, '⚠️ ', w)),
+      h('div', { class: 'no-print' }, h('label', { for: 'meeting-title' }, 'Título'), titleInput),
+      ready && wide ? null : h('div', { class: 'card audio-top no-print' }, audio),
+      ready ? h('div', {}, m.result.warnings.filter((w) => !(m.demo && /MODO DEMONSTRAÇÃO/.test(w))).map((w) => h('div', { class: 'notice' }, '⚠️ ', w)),
         h('div', { class: 'notice' }, 'Resumo gerado por IA. Itens com ▶ levam ao trecho da gravação: confira antes de confiar. Itens marcados como sugestão não foram ditos na reunião.'),
         h('div', { class: 'row no-print' },
           editing ? [h('button', { class: 'btn primary', type: 'button', onclick: saveEdit }, 'Salvar alterações'), h('button', { class: 'btn', type: 'button', onclick: () => { editing = false; render(); } }, 'Cancelar')]
@@ -389,7 +391,7 @@ async function meetingView(id) {
               h('button', { class: 'btn', type: 'button', onclick: () => { document.querySelectorAll('details').forEach((d) => { d.open = true; }); window.print(); } }, 'Imprimir')]),
         h('div', { id: 'save-err' }), editing ? null : filterBar(),
           h('div', { class: `result-layout${onlyCheck ? ' only-check' : ''}` }, h('div', { class: 'main-col' }, marksSection(), tasksSection(), decisionsSection(), summarySection()),
-            h('aside', { class: 'side-col', 'aria-label': 'Áudio e transcrição' }, h('div', { class: 'card no-print' }, audio), transcriptSection())))
+            h('aside', { class: 'side-col', 'aria-label': 'Áudio e transcrição' }, wide ? h('div', { class: 'card no-print' }, audio) : null, transcriptSection())))
         : progressSection(),
       h('div', { class: 'no-print' }, del));
   }
@@ -406,6 +408,9 @@ async function meetingView(id) {
     }, 2000);
   }
 
+  const mq = window.matchMedia('(min-width: 980px)');
+  mq.addEventListener('change', render);
+  cleanup = () => mq.removeEventListener('change', render);
   render();
   poll();
 }
