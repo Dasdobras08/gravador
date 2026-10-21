@@ -27,10 +27,11 @@ const recorder = rd('public/recorder.js').replace(/export function recordingSupp
 }
 `);
 const css = rd('public/styles.css');
+const logo = 'data:image/svg+xml;base64,' + Buffer.from(rd('public/logo.svg')).toString('base64');
 const js = [strip(rd('server/schema.js')), strip(rd('server/ai/demo.js')), strip(rd('server/markdown.js')), strip(rd('demo-web/mock-api.js')),
   strip(rd('public/util.js')), strip(recorder), strip(app).replace(/^const main = /m, 'const loc = { _h: "#/", get hash() { return this._h; }, set hash(v) { this._h = v; navigate(); } };\nconst main = ')].join('\n');
 
-const html = `<title>Gravador de reuniões</title>
+const html = `<title>Confere</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <style>
 ${css.replace(/\n:root \{/, '\n:root {')}
@@ -40,7 +41,7 @@ main { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: m
 .topbar { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
 </style>
 <a class="skip" href="#main">Ir para o conteúdo</a>
-<header class="topbar"><a href="#/" class="brand">Gravador de reuniões</a><span id="mode-badge" class="badge" hidden></span></header>
+<header class="topbar"><a href="#/" class="brand"><img src="${logo}" alt="">Confere</a><span id="mode-badge" class="badge" hidden></span></header>
 <main id="main" tabindex="-1"></main>
 <div id="live" class="sr-only" aria-live="polite"></div>
 <dialog id="confirm" aria-labelledby="confirm-title"><form method="dialog"><h2 id="confirm-title"></h2><p id="confirm-text"></p>

@@ -1,4 +1,4 @@
-# Gravador de reuniões
+# Confere
 
 Grave (ou envie) o áudio de uma reunião e revise depois um resumo com decisões e tarefas **ligadas aos trechos da conversa**, para você poder conferir tudo na gravação.
 

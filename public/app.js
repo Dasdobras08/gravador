@@ -24,6 +24,7 @@ function navigate() {
   lastHash = location.hash || '#/';
   guard = () => false;
   clearInterval(timer); cleanup(); cleanup = () => {};
+  main.classList.remove('wide');
   const hash = location.hash || '#/';
   const m = hash.match(/^#\/m\/([\w-]+)$/);
   (m ? meetingView(m[1]) : homeView()).catch((e) => {
@@ -37,7 +38,7 @@ function navigate() {
 async function homeView() {
   const consent = h('input', { type: 'checkbox', id: 'consent' });
   const title = h('input', { type: 'text', id: 'title', placeholder: 'Ex.: Planejamento do trimestre', maxLength: 200 });
-  const recBox = h('div', { class: 'card' });
+  const recBox = h('div', { class: 'card primary' });
   const upBox = h('div', { class: 'card' });
   const listBox = h('div', { class: 'card' });
   const support = recordingSupport();
@@ -45,7 +46,7 @@ async function homeView() {
   /* --- gravação --- */
   const rec = new MeetingRecorder();
   const status = h('div', { role: 'status' });
-  const startBtn = h('button', { class: 'btn primary', type: 'button' }, 'Iniciar gravação');
+  const startBtn = h('button', { class: 'btn primary big', type: 'button' }, 'Iniciar gravação');
   const pauseBtn = h('button', { class: 'btn', type: 'button' }, 'Pausar');
   const stopBtn = h('button', { class: 'btn primary', type: 'button' }, 'Encerrar e processar');
   const discardBtn = h('button', { class: 'btn danger', type: 'button' }, 'Descartar');
@@ -159,19 +160,19 @@ async function homeView() {
   async function refreshList() {
     const items = await api.list();
     const busy = items.some((m) => m.status === 'transcribing' || m.status === 'summarizing');
-    listBox.replaceChildren(h('h2', {}, 'Reuniões'),
+    listBox.replaceChildren(h('h2', {}, 'Suas reuniões'),
       items.length ? h('ul', { class: 'list' }, items.map((m) => h('li', {}, h('a', { class: 'item', href: `#/m/${m.id}` },
         h('span', {}, h('span', { class: 'title' }, m.title), h('br'),
           h('span', { class: 'meta' }, fmtDate(m.createdAt), m.durationSec ? ` · ${fmtTime(m.durationSec)}` : '', m.source === 'arquivo' ? ' · arquivo enviado' : ' · gravada no navegador')),
         h('span', {}, m.demo ? h('span', { class: 'badge demo' }, 'demonstração ') : null, statusBadge(m)))))) 
-        : h('p', { class: 'muted' }, 'Nenhuma reunião ainda. Grave ou envie um áudio acima para começar.'));
+        : h('p', { class: 'muted' }, 'Nenhuma reunião por aqui ainda. Grave ou envie um áudio acima para começar.'));
     return busy;
   }
   await refreshList();
   timer = setInterval(() => refreshList().catch(() => {}), 3000);
 
   main.replaceChildren(
-    h('h1', {}, 'Suas reuniões'),
+    h('div', { class: 'hero' }, h('h1', {}, 'Participe da reunião. ', h('span', { class: 'hl' }, 'Depois, confira.')), h('p', { class: 'lead' }, 'Grave ou envie o áudio e receba um resumo com decisões e tarefas ligadas aos trechos da conversa, para você conferir cada ponto.')),
     config.demo ? h('div', { class: 'notice' }, h('strong', {}, 'Modo demonstração. '), 'Nenhum serviço de IA está configurado: o áudio não será transcrito de verdade e o resultado será um exemplo fixo. Defina OPENAI_API_KEY no servidor para o processamento real.') : null,
     h('div', { class: 'card' },
       h('label', { for: 'title' }, 'Título da reunião (opcional)'), title,
@@ -186,6 +187,7 @@ async function homeView() {
 const STEPS = [['transcribing', 'Transcrevendo'], ['summarizing', 'Gerando resumo'], ['ready', 'Concluído']];
 
 async function meetingView(id) {
+  main.classList.add('wide');
   let m = await api.get(id);
   let editing = false;
   let draft = null;
@@ -263,7 +265,7 @@ async function meetingView(id) {
 
   function tasksSection() {
     const r = editing ? draft : m.result;
-    const sec = h('section', { class: 'card' }, h('h2', {}, 'Tarefas e próximos passos'));
+    const sec = h('section', { class: 'card tasks-card' }, h('h2', {}, 'Tarefas e próximos passos'));
     if (!r.tasks.length && !editing) sec.append(h('p', { class: 'muted' }, 'Nenhuma tarefa foi identificada na conversa.'));
     r.tasks.forEach((t, i) => {
       if (editing) {
@@ -318,7 +320,7 @@ async function meetingView(id) {
       h('div', { class: 'row between' }, h('h1', {}, m.title), statusBadge(m)),
       h('p', { class: 'meta' }, `${fmtDate(m.createdAt)}${m.durationSec ? ` · ${fmtTime(m.durationSec)}` : ''}`),
       m.demo ? h('div', { class: 'notice' }, h('strong', {}, 'DEMONSTRAÇÃO: '), 'o conteúdo abaixo é um exemplo fixo e não foi gerado a partir do seu áudio.') : null,
-      h('div', { class: 'no-print' }, h('label', { for: 'meeting-title' }, 'Título'), titleInput, h('div', { class: 'card' }, audio)),
+      h('div', { class: 'no-print' }, h('label', { for: 'meeting-title' }, 'Título'), titleInput, ready ? null : h('div', { class: 'card' }, audio)),
       ready ? h('div', {}, m.result.warnings.map((w) => h('div', { class: 'notice' }, '⚠️ ', w)),
         h('div', { class: 'notice' }, 'Resumo gerado por IA. Itens com ▶ levam ao trecho da gravação: confira antes de confiar. Itens marcados como sugestão não foram ditos na reunião.'),
         h('div', { class: 'row no-print' },
@@ -326,7 +328,9 @@ async function meetingView(id) {
             : [h('button', { class: 'btn', type: 'button', onclick: startEdit }, 'Editar resumo e tarefas'),
               h('a', { class: 'btn', href: api.exportUrl(id), download: '' }, 'Exportar Markdown'),
               h('button', { class: 'btn', type: 'button', onclick: () => { document.querySelectorAll('details').forEach((d) => { d.open = true; }); window.print(); } }, 'Imprimir')]),
-        h('div', { id: 'save-err' }), summarySection(), decisionsSection(), tasksSection(), transcriptSection())
+        h('div', { id: 'save-err' }),
+          h('div', { class: 'result-layout' }, h('div', { class: 'main-col' }, tasksSection(), decisionsSection(), summarySection()),
+            h('aside', { class: 'side-col', 'aria-label': 'Áudio e transcrição' }, h('div', { class: 'card no-print' }, audio), transcriptSection())))
         : progressSection(),
       h('div', { class: 'no-print' }, del));
   }
