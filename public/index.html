@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gravador de reuniões</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <a class="skip" href="#main">Ir para o conteúdo</a>
+  <header class="topbar">
+    <a href="#/" class="brand">Gravador de reuniões</a>
+    <span id="mode-badge" class="badge" hidden></span>
+  </header>
+  <main id="main" tabindex="-1"></main>
+  <div id="live" class="sr-only" aria-live="polite"></div>
+  <dialog id="confirm" aria-labelledby="confirm-title">
+    <form method="dialog">
+      <h2 id="confirm-title"></h2>
+      <p id="confirm-text"></p>
+      <div class="row end">
+        <button value="cancel" class="btn">Cancelar</button>
+        <button value="ok" class="btn danger" id="confirm-ok">Confirmar</button>
+      </div>
+    </form>
+  </dialog>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
