@@ -180,3 +180,16 @@ test('momentos marcados durante a gravação são guardados e exportados', async
     assert.match(md, /\[00:02\]/);
   } finally { await s.close(); }
 });
+
+test('com APP_PASSWORD o app exige senha em toda rota; sem ela, não', async () => {
+  const s = await boot(demoProvider, { appPassword: 's3gredo' });
+  try {
+    assert.equal((await fetch(`${s.base}/`)).status, 401);
+    assert.equal((await fetch(`${s.base}/api/meetings`)).status, 401);
+    const bad = 'Basic ' + Buffer.from('eu:errada').toString('base64');
+    assert.equal((await fetch(`${s.base}/api/meetings`, { headers: { Authorization: bad } })).status, 401);
+    const ok = 'Basic ' + Buffer.from('qualquer:s3gredo').toString('base64');
+    assert.equal((await fetch(`${s.base}/api/meetings`, { headers: { Authorization: ok } })).status, 200);
+    assert.equal((await fetch(`${s.base}/`, { headers: { Authorization: ok } })).status, 200);
+  } finally { await s.close(); }
+});

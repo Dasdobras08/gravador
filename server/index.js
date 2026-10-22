@@ -5,6 +5,11 @@ import { createApp } from './app.js';
 
 loadDotEnv(path.resolve('.env'));
 const config = loadConfig();
+const local = ['127.0.0.1', 'localhost', '::1'].includes(config.host);
+if (!local && !config.appPassword) {
+  console.error(`Recusando iniciar em ${config.host} sem senha: defina APP_PASSWORD (o app guarda áudio de reuniões).`);
+  process.exit(1);
+}
 const provider = createProvider(config);
 const { server, pipeline } = await createApp({ config, provider });
 

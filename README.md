@@ -47,5 +47,5 @@ Lista/estados, gravação no Chromium (microfone falso), pausa/retomada, envio d
 - A gravação depende de HTTPS ou `localhost`, de permissão do microfone e de a aba permanecer ativa. Navegadores (especialmente iOS/Android) podem suspender a captura com a tela bloqueada ou a aba em segundo plano; o app avisa quando a aba vai para segundo plano, mas não garante continuidade. Se o microfone cair, o trecho já capturado pode ser enviado.
 - Grava apenas o **seu microfone**, não o áudio de outros participantes de chamadas online (grave por outro meio e envie o arquivo).
 - Arquivos acima de `MAX_UPLOAD_MB` são recusados (sem divisão automática). Sem identificação de falantes.
-- Sem login: pensado para uso local; para expor na rede, coloque atrás de autenticação/HTTPS.
+- Autenticação mínima: senha única opcional (`APP_PASSWORD`); fora do localhost ela é obrigatória. Sem contas de usuário. Hospedagem: `docs/DEPLOY.md`.
 - Resumos de IA podem errar: confira pelos trechos (▶).

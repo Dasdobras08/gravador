@@ -1,4 +1,5 @@
 import http from 'node:http';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
@@ -40,6 +41,17 @@ function readBody(req, limit) {
     req.on('end', () => resolve(Buffer.concat(chunks)));
     req.on('error', reject);
   });
+}
+
+const digest = (v) => crypto.createHash('sha256').update(String(v)).digest();
+
+/** Confere o cabeçalho Basic contra a senha configurada (comparação em tempo constante). */
+export function passwordOk(header, password) {
+  const m = /^Basic\s+(.+)$/i.exec(header || '');
+  if (!m) return false;
+  const decoded = Buffer.from(m[1], 'base64').toString('utf8');
+  const given = decoded.slice(decoded.indexOf(':') + 1);
+  return crypto.timingSafeEqual(digest(given), digest(password));
 }
 
 export async function createApp({ config, provider, log = console }) {
@@ -89,6 +101,10 @@ export async function createApp({ config, provider, log = console }) {
   }
 
   async function route(req, res) {
+    if (config.appPassword && !passwordOk(req.headers.authorization, config.appPassword)) {
+      res.writeHead(401, { 'WWW-Authenticate': 'Basic realm="Confere", charset="UTF-8"', 'Content-Type': 'text/plain; charset=utf-8' });
+      return res.end('Senha necessária.');
+    }
     const url = new URL(req.url, 'http://localhost');
     const { pathname } = url;
     const method = req.method;

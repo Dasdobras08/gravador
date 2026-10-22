@@ -18,6 +18,7 @@ export function loadConfig(env = process.env) {
   const provider = requested || (key ? 'openai' : 'demo');
   return {
     port: Number(env.PORT || 3000),
+    appPassword: env.APP_PASSWORD || '', // se definida, o app exige senha (HTTP Basic; usuário livre)
     host: env.HOST || '127.0.0.1',
     dataDir: path.resolve(env.DATA_DIR || './data'),
     maxUploadBytes: Number(env.MAX_UPLOAD_MB || 25) * 1024 * 1024,
