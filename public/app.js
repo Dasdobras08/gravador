@@ -1,9 +1,10 @@
 import { h, put, fmtTime, fmtDate, announce, confirmDialog } from './util.js';
 import { api } from './api.js';
+import { auth } from './auth.js';
 import { MeetingRecorder, recordingSupport } from './recorder.js';
 
 const main = document.getElementById('main');
-let config = { demo: false, maxUploadMb: 25 };
+let config = { demo: false, auth: false, maxUploadMb: 25 };
 let timer = null; // polling / cronômetro da view atual
 let cleanup = () => {};
 let guard = () => false; // true enquanto há gravação em andamento
@@ -27,10 +28,77 @@ function navigate() {
   main.classList.remove('wide', 'recording');
   const hash = location.hash || '#/';
   const m = hash.match(/^#\/m\/([\w-]+)$/);
-  (m ? meetingView(m[1]) : homeView()).catch((e) => {
+  const authRoute = hash.match(/^#\/(entrar|cadastro|recuperar)$/);
+  renderAccount();
+  if (config.auth && !auth.session() && !authRoute) { location.hash = '#/entrar'; return; }
+  if (config.auth && auth.session() && authRoute) { location.hash = '#/'; return; }
+  (authRoute ? authView(authRoute[1]) : m ? meetingView(m[1]) : homeView()).catch((e) => {
     put(main, h('div', { class: 'notice error', role: 'alert' }, e.message), h('a', { href: '#/' }, '← Voltar à lista'));
   });
   main.focus();
+}
+
+/* ------------------------------------------------------------------ Conta */
+
+function renderAccount() {
+  const el = document.getElementById('account');
+  if (!el) return;
+  const s = config.auth ? auth.session() : null;
+  put(el, s ? [h('span', { class: 'meta' }, s.user?.email), h('button', { class: 'btn small', type: 'button', onclick: () => { auth.logout(); location.hash = '#/entrar'; renderAccount(); } }, 'Sair')] : null);
+}
+window.addEventListener('confere:logout', () => { renderAccount(); location.hash = '#/entrar'; });
+
+const minutes = (sec) => `${Math.floor((sec || 0) / 60)} min`;
+
+/** Cartão com plano e saldo (só no modo serviço). */
+async function quotaCard() {
+  if (!config.auth) return null;
+  const { quota: q } = await api.me().catch(() => ({}));
+  if (!q) return null;
+  const left = (q.plan_seconds_remaining || 0) + (q.extra_seconds || 0);
+  const ends = q.period_end ? new Date(q.period_end).toLocaleDateString('pt-BR') : '';
+  const trial = q.status === 'trialing';
+  const text = !q.active
+    ? `${q.plan_name}: ${trial ? 'seu teste gratuito terminou' : 'sua assinatura não está ativa'}. Escolha um plano para continuar transcrevendo.`
+    : `${q.plan_name} · ${minutes(left)} restantes${ends ? ` · ${trial ? 'teste até' : 'renova em'} ${ends}` : ''}`;
+  return h('div', { class: `notice setup${q.can_process ? ' quota-ok' : ''}`, role: 'status' }, h('strong', {}, 'Seu plano: '), text,
+    q.active && !q.can_process ? ' Seu saldo de minutos acabou.' : null);
+}
+
+function authView(mode) {
+  const titles = { entrar: 'Entrar', cadastro: 'Criar conta', recuperar: 'Recuperar senha' };
+  const email = h('input', { type: 'text', id: 'auth-email', inputMode: 'email', autocomplete: 'email', placeholder: 'voce@exemplo.com' });
+  const pass = h('input', { type: 'password', id: 'auth-pass', autocomplete: mode === 'cadastro' ? 'new-password' : 'current-password', minLength: 8 });
+  const msg = h('div', { role: 'status' });
+  const btn = h('button', { class: 'btn primary big', type: 'submit' }, titles[mode]);
+  const form = h('form', { class: 'card auth-card', novalidate: true },
+    h('h1', {}, titles[mode]),
+    mode === 'cadastro' ? h('p', { class: 'muted' }, 'Teste gratuito de 7 dias, com 20 minutos de transcrição, sem cartão. O áudio enviado é processado no servidor e por um serviço de IA para transcrição.') : null,
+    h('label', { for: 'auth-email' }, 'E-mail'), email,
+    mode === 'recuperar' ? null : [h('label', { for: 'auth-pass' }, mode === 'cadastro' ? 'Senha (mínimo 8 caracteres)' : 'Senha'), pass],
+    h('div', { class: 'row' }, btn), msg,
+    h('p', { class: 'muted' },
+      mode !== 'entrar' ? h('a', { href: '#/entrar' }, 'Já tenho conta') : null,
+      mode === 'entrar' ? [h('a', { href: '#/cadastro' }, 'Criar conta'), ' · ', h('a', { href: '#/recuperar' }, 'Esqueci a senha')] : null));
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    btn.disabled = true; put(msg, null);
+    try {
+      if (mode === 'entrar') { await auth.login(email.value.trim(), pass.value); location.hash = '#/'; return; }
+      if (mode === 'cadastro') {
+        const d = await auth.signup(email.value.trim(), pass.value);
+        if (d.needsConfirmation) { put(msg, h('div', { class: 'notice' }, `Enviamos um e-mail de confirmação para ${email.value.trim()}. Confirme e depois entre.`)); return; }
+        location.hash = '#/'; return;
+      }
+      await auth.recover(email.value.trim());
+      put(msg, h('div', { class: 'notice' }, 'Se este e-mail estiver cadastrado, você receberá as instruções para criar uma nova senha.'));
+    } catch (err) {
+      put(msg, h('div', { class: 'notice error', role: 'alert' }, err.message));
+    } finally { btn.disabled = false; }
+  });
+  put(main, form);
+  email.focus();
+  return Promise.resolve();
 }
 
 /* ---------------------------------------------------------------- Início */
@@ -167,7 +235,7 @@ async function homeView() {
     put(upStatus, h('p', {}, 'Enviando…'), bar);
     upBtn.disabled = true;
     try {
-      const m = await api.upload(f, { title: title.value.trim() || f.name.replace(/\.[^.]+$/, ''), filename: f.name, source: 'arquivo' }, (p) => { bar.value = p; });
+      const m = await api.upload(f, { title: title.value.trim() || f.name.replace(/\.[^.]+$/, ''), filename: f.name, source: 'arquivo', duration: await probeDuration(f) }, (p) => { bar.value = p; });
       location.hash = `#/m/${m.id}`;
     } catch (e) {
       upBtn.disabled = false;
@@ -189,11 +257,13 @@ async function homeView() {
         : h('p', { class: 'muted' }, 'Nenhuma reunião por aqui ainda. Grave ou envie um áudio acima para começar.'));
     return busy;
   }
+  const quota = await quotaCard();
   await refreshList();
   timer = setInterval(() => refreshList().catch(() => {}), 3000);
 
   put(main, 
     h('div', { class: 'hero' }, h('h1', {}, 'Participe da reunião. ', h('span', { class: 'hl' }, 'Depois, confira.')), h('p', { class: 'lead' }, 'Grave ou envie o áudio e receba um resumo com decisões e tarefas ligadas aos trechos da conversa, para você conferir cada ponto.')),
+    quota,
     config.demo ? h('div', { class: 'notice setup' }, h('strong', {}, 'Modo demonstração. '), 'Nenhum serviço de IA está configurado: o áudio não será transcrito de verdade e o resultado será um exemplo fixo. Defina OPENAI_API_KEY no servidor para o processamento real.') : null,
     tour,
     h('div', { class: 'card setup' },
@@ -202,6 +272,20 @@ async function homeView() {
     h('div', { class: 'grid' }, recBox, upBox),
     listBox);
   renderRec();
+}
+
+/** Duração do arquivo (s) lida no navegador; ajuda a avisar sobre o saldo antes de enviar. */
+function probeDuration(file) {
+  return new Promise((resolve) => {
+    const a = document.createElement('audio');
+    const url = URL.createObjectURL(file);
+    const done = (v) => { URL.revokeObjectURL(url); resolve(v); };
+    a.preload = 'metadata';
+    a.onloadedmetadata = () => done(Number.isFinite(a.duration) ? a.duration : null);
+    a.onerror = () => done(null);
+    setTimeout(() => done(null), 3000);
+    a.src = url;
+  });
 }
 
 /* ------------------------------------------------------------- Resultado */
@@ -215,7 +299,9 @@ async function meetingView(id) {
   let onlyCheck = false; // filtro: só o que precisa de conferência
   let draft = null;
   const root = h('div');
-  const audio = h('audio', { controls: true, preload: 'metadata', src: api.audioUrl(id), 'aria-label': 'Áudio da reunião' });
+  const audio = h('audio', { controls: true, preload: 'metadata', 'aria-label': 'Áudio da reunião' });
+  let audioObjectUrl = null;
+  api.audioUrl(id).then((u) => { audioObjectUrl = u; audio.src = u; }).catch(() => { audio.title = 'Áudio indisponível'; });
   put(main, root);
 
   const seek = (sec, segIndex) => {
@@ -387,7 +473,7 @@ async function meetingView(id) {
         h('div', { class: 'row no-print' },
           editing ? [h('button', { class: 'btn primary', type: 'button', onclick: saveEdit }, 'Salvar alterações'), h('button', { class: 'btn', type: 'button', onclick: () => { editing = false; render(); } }, 'Cancelar')]
             : [h('button', { class: 'btn', type: 'button', onclick: startEdit }, 'Editar resumo e tarefas'),
-              h('a', { class: 'btn', href: api.exportUrl(id), download: '' }, 'Exportar Markdown'),
+              h('button', { class: 'btn', type: 'button', onclick: () => api.downloadExport(id).catch((e) => announce(e.message)) }, 'Exportar Markdown'),
               h('button', { class: 'btn', type: 'button', onclick: () => { document.querySelectorAll('details').forEach((d) => { d.open = true; }); window.print(); } }, 'Imprimir')]),
         h('div', { id: 'save-err' }), editing ? null : filterBar(),
           h('div', { class: `result-layout${onlyCheck ? ' only-check' : ''}` }, h('div', { class: 'main-col' }, marksSection(), tasksSection(), decisionsSection(), summarySection()),
@@ -410,7 +496,7 @@ async function meetingView(id) {
 
   const mq = window.matchMedia('(min-width: 980px)');
   mq.addEventListener('change', render);
-  cleanup = () => mq.removeEventListener('change', render);
+  cleanup = () => { mq.removeEventListener('change', render); if (audioObjectUrl?.startsWith('blob:')) URL.revokeObjectURL(audioObjectUrl); };
   render();
   poll();
 }
@@ -420,6 +506,7 @@ async function meetingView(id) {
 (async () => {
   try {
     config = await api.config();
+    auth.enabled = Boolean(config.auth);
     const badge = document.getElementById('mode-badge');
     badge.hidden = false;
     badge.textContent = config.demo ? 'Modo demonstração' : `IA: ${config.provider}`;

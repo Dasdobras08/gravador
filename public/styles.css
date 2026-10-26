@@ -116,3 +116,9 @@ main.recording .rec-status { order: 1; width: 100%; } main.recording .rec-contro
 @media (max-width: 979px) {
   .audio-top { position: sticky; top: 0; z-index: 5; padding: 8px 10px; margin: 8px 0; box-shadow: 0 6px 16px rgb(0 0 0 / .08); }
 }
+.account { margin-left: auto; display: flex; gap: 10px; align-items: center; }
+.auth-card { max-width: 440px; margin: 24px auto; }
+main.recording .quota-ok { display: none; }
+.topbar { flex-wrap: wrap; row-gap: 6px; }
+.account .meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 46vw; }
+@media (max-width: 520px) { .account { flex-basis: 100%; justify-content: space-between; margin-left: 0; } .account:empty { display: none; } }

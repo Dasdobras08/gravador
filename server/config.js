@@ -23,6 +23,13 @@ export function loadConfig(env = process.env) {
     dataDir: path.resolve(env.DATA_DIR || './data'),
     maxUploadBytes: Number(env.MAX_UPLOAD_MB || 25) * 1024 * 1024,
     provider,
+    // Se SUPABASE_URL estiver definida, o app exige login e guarda tudo no Supabase (modo serviço).
+    supabase: {
+      url: (env.SUPABASE_URL || '').replace(/\/$/, ''),
+      anonKey: env.SUPABASE_ANON_KEY || '',
+      serviceKey: env.SUPABASE_SERVICE_ROLE_KEY || '',
+      bucket: env.SUPABASE_AUDIO_BUCKET || 'audio',
+    },
     openai: {
       apiKey: key,
       baseUrl: (env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, ''),

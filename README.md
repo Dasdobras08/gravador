@@ -47,5 +47,6 @@ Lista/estados, gravação no Chromium (microfone falso), pausa/retomada, envio d
 - A gravação depende de HTTPS ou `localhost`, de permissão do microfone e de a aba permanecer ativa. Navegadores (especialmente iOS/Android) podem suspender a captura com a tela bloqueada ou a aba em segundo plano; o app avisa quando a aba vai para segundo plano, mas não garante continuidade. Se o microfone cair, o trecho já capturado pode ser enviado.
 - Grava apenas o **seu microfone**, não o áudio de outros participantes de chamadas online (grave por outro meio e envie o arquivo).
 - Arquivos acima de `MAX_UPLOAD_MB` são recusados (sem divisão automática). Sem identificação de falantes.
+- Modo serviço (contas, planos e saldo de minutos no Supabase): `docs/SUPABASE.md`. Sem `SUPABASE_URL` o app roda no modo local.
 - Autenticação mínima: senha única opcional (`APP_PASSWORD`); fora do localhost ela é obrigatória. Sem contas de usuário. Hospedagem: `docs/DEPLOY.md`.
 - Resumos de IA podem errar: confira pelos trechos (▶).

@@ -21,7 +21,8 @@ async function process(id) {
 }
 
 const api = {
-  config: async () => ({ provider: 'demo', demo: true, maxUploadMb: 25 }),
+  config: async () => ({ provider: 'demo', demo: true, auth: false, maxUploadMb: 25 }),
+  me: async () => ({ local: true }),
   list: async () => [...store.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map(listView),
   get: async (id) => { if (!store.has(id)) throw new Error('Reunião não encontrada.'); return clone(store.get(id)); },
   remove: async (id) => { const m = store.get(id); if (m) URL.revokeObjectURL(m.audioUrl); store.delete(id); return null; },
@@ -32,8 +33,15 @@ const api = {
     if (body.result) m.result = sanitizeEdit(body.result, m.result, m.transcript.segments.length);
     return clone(m);
   },
-  audioUrl: (id) => store.get(id)?.audioUrl || '',
-  exportMarkdown: (id) => toMarkdown(store.get(id)),
+  audioUrl: async (id) => store.get(id)?.audioUrl || '',
+  // O visualizador só permite salvar arquivos pela capacidade "downloads".
+  downloadExport: async (id) => {
+    try {
+      const d = await window.claude?.use?.('downloads');
+      if (!d) throw new Error('indisponível');
+      await d.save({ filename: 'reuniao-demonstracao.md', data: toMarkdown(store.get(id)) });
+    } catch (e) { announce(e?.code === 'declined' ? 'Exportação cancelada.' : 'Não foi possível salvar o arquivo neste visualizador.'); }
+  },
   upload: async (blob, { title, filename, source, duration, marks }, onProgress) => {
     if (!/^(audio|video)\//.test(blob.type || 'audio/x')) throw new Error('Formato não suportado. Envie um arquivo de áudio.');
     for (let p = 0; p <= 1; p += 0.25) { onProgress(p); await sleep(120); }

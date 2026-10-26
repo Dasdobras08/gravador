@@ -3,8 +3,9 @@ import { sanitizeResult, sanitizeSegments } from './schema.js';
 import { DEMO_NOTICE } from './ai/demo.js';
 
 export class Pipeline {
-  constructor({ store, provider, log = console }) {
+  constructor({ store, provider, quota = null, log = console }) {
     this.store = store;
+    this.quota = quota; // opcional: débito de minutos (modo serviço)
     this.provider = provider;
     this.log = log;
     this.queue = [];
@@ -43,13 +44,15 @@ export class Pipeline {
       if (!m.transcript) {
         m.status = 'transcribing'; m.error = null; m.failedStage = null;
         await this.store.save(m);
-        const raw = await this.provider.transcribe({ audioPath: this.store.audioPath(id), mime: m.mime, filename: m.filename });
+        const raw = await this.store.withAudioFile(id, (audioPath) =>
+          this.provider.transcribe({ audioPath, mime: m.mime, filename: m.filename }));
         const segments = sanitizeSegments(raw);
         if (!segments.length) {
           throw new Error('Nenhuma fala foi reconhecida no áudio. Ele pode estar vazio, mudo ou inaudível.');
         }
         if (!(await this.#stillExists(id))) return;
         m.transcript = { segments };
+        await this.#charge(m, segments);
       }
 
       stage.current = 'summarizing';
@@ -71,6 +74,14 @@ export class Pipeline {
       m.error = e.message || 'Erro desconhecido.';
       await this.store.save(m);
     }
+  }
+
+  /** Debita os minutos do áudio transcrito. Falha de cobrança é registrada, não derruba o processamento. */
+  async #charge(m, segments) {
+    if (!this.quota || !m.userId) return;
+    const seconds = Math.max(segments.at(-1)?.end ?? 0, m.durationSec ?? 0);
+    try { await this.quota.consume(m.userId, seconds, m.id); }
+    catch (e) { this.log.error(`[quota] falha ao debitar ${m.id}:`, e.detail || e.message); }
   }
 
   async #stillExists(id) {

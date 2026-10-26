@@ -1,6 +1,7 @@
 // Persistência em arquivos: data/meetings/<id>/{meeting.json,audio.bin}.
 // Nada aqui é servido estaticamente; o áudio só sai pela rota /api/meetings/:id/audio.
 import fs from 'node:fs/promises';
+import { createReadStream } from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
@@ -23,6 +24,8 @@ export class Store {
   audioPath(id) {
     return path.join(this.dir(id), 'audio.bin');
   }
+
+  forUser() { return this; } // modo local: um único usuário
 
   async create({ title, filename, mime, source, durationSec, marks = [] }) {
     const id = crypto.randomUUID();
@@ -61,7 +64,7 @@ export class Store {
     }
   }
 
-  async list() {
+  async list({ statuses } = {}) {
     const ids = await fs.readdir(this.root).catch(() => []);
     const all = [];
     for (const id of ids) {
@@ -69,7 +72,33 @@ export class Store {
       const m = await this.get(id).catch(() => null);
       if (m) all.push(m);
     }
-    return all.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const out = statuses ? all.filter((m) => statuses.includes(m.status)) : all;
+    return out.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  async putAudio(id, buffer) {
+    await fs.writeFile(this.audioPath(id), buffer, { mode: 0o600 });
+  }
+
+  /** Resposta de áudio com suporte a Range: { status, headers, stream } ou null se não existir. */
+  async audio(id, rangeHeader, mime) {
+    const file = this.audioPath(id);
+    const stat = await fs.stat(file).catch(() => null);
+    if (!stat) return null;
+    const headers = { 'Content-Type': mime || 'application/octet-stream', 'Accept-Ranges': 'bytes' };
+    const range = /^bytes=(\d*)-(\d*)$/.exec(rangeHeader || '');
+    if (range && (range[1] || range[2])) {
+      const start = range[1] ? Number(range[1]) : Math.max(0, stat.size - Number(range[2]));
+      const end = Math.min(range[1] && range[2] ? Number(range[2]) : stat.size - 1, stat.size - 1);
+      if (start > end) return { status: 416, headers: { 'Content-Range': `bytes */${stat.size}` }, stream: null };
+      return { status: 206, headers: { ...headers, 'Content-Range': `bytes ${start}-${end}/${stat.size}`, 'Content-Length': end - start + 1 }, stream: createReadStream(file, { start, end }) };
+    }
+    return { status: 200, headers: { ...headers, 'Content-Length': stat.size }, stream: createReadStream(file) };
+  }
+
+  /** Dá ao `fn` um caminho local para o áudio (aqui já é local). */
+  async withAudioFile(id, fn) {
+    return fn(this.audioPath(id));
   }
 
   /** Remove reunião, áudio, transcrição e resultados (tudo vive na mesma pasta). */
